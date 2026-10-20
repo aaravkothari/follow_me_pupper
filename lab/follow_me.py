@@ -232,15 +232,21 @@ class StateMachineNode(Node):
         #   return None if it is None (nobody near where the target was),
         #   else target_lock.remember(self.lock, target).
         # Step 4: in 3, also set self.target_bottom = box_bottom(target).
-        if len(detections) > 0:
-            offset_min = abs(box_offset(detections[0]))
+        filtered_detections = []
+        for i in range(len(detections)):
+            d = detections[i]
+            if detection_class_id(d) == self.target_class_id:
+                filtered_detections.append(d)
+        print(filtered_detections)
+        if len(filtered_detections) > 0:
+            offset_min = abs(box_offset(filtered_detections[0]))
             offset_idx = 0
-            for i in range(len(detections)):
-                detection = detections[i]
+            for i in range(len(filtered_detections)):
+                detection = filtered_detections[i]
                 if offset_min > abs(box_offset(detection)):
                     offset_min = abs(box_offset(detection))
                     offset_idx = i
-            target = detections[offset_idx]
+            target = filtered_detections[offset_idx]
             self.target_pos = box_offset(target)
             self.last_detection_time = self.get_clock().now()
             self.target_bottom = box_bottom(target)
