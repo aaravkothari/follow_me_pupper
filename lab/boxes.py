@@ -74,7 +74,8 @@ def box_offset(detection):
     # ========== YOUR CODE HERE: Step 2: box_offset ==========
     # Normalize the box's centre x by IMAGE_WIDTH so that the middle of
     # the image comes out as 0.
-    raise NotImplementedError
+    # raise NotImplementedError
+    return (detection.bbox.center.position.x - IMAGE_WIDTH/2) / IMAGE_WIDTH
     # ========================================================
 
 
