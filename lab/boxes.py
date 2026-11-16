@@ -100,6 +100,5 @@ def box_bottom(detection):
     # ========== YOUR CODE HERE: Step 4: box_bottom ==========
     # The box gives you its centre y and its height. Return the y of its
     # bottom edge (remember: y grows downward).
-    # return detection.bbox.center.position.y +  detection.bbox.size_y / 2
-    raise NotImplementedError
+    return detection.bbox.center.position.y +  detection.bbox.size_y / 2
     # ========================================================

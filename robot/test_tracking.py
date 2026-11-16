@@ -16,7 +16,7 @@ from karel import KarelPupper
 
 # Common trackable objects for quick reference
 COMMON_OBJECTS = [
-    "person", "dog", "cat", "car", "bicycle", "motorcycle",
+    "red_cap", "person", "dog", "cat", "car", "bicycle", "motorcycle",
     "bottle", "cup", "chair", "couch", "bed", "laptop",
     "cell phone", "book", "clock", "scissors", "teddy bear",
     "backpack", "umbrella", "handbag", "tie", "suitcase"

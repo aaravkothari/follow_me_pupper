@@ -45,9 +45,15 @@ from boxes import box_bottom, box_offset, detection_class_id
 # ========== YOUR CODE HERE: Step 2: control constants ==========
 TIMEOUT = 1.0 #None            # s without a detection before we go searching
 SEARCH_YAW_VEL = 1.0 #None     # rad/s rotation speed while searching
-TRACK_FORWARD_VEL = 0.3 #None  # m/s forward speed while tracking (Step 4: the top speed)
+TRACK_FORWARD_VEL = 1.0 #None  # m/s forward speed while tracking (Step 4: the top speed)
 KP = 5 #None                 # rad/s of yaw per unit of box_offset
 # ===============================================================
+
+# --- Red pen cap (class red_cap, from robot/red_cap.py) ----------------------
+# A cap is small and usually held in the air, so box_bottom (the floor-contact
+# distance sensor) means nothing for it: we use its apparent size instead
+# (target_lock.cap_approach_speed), and walk slower so it can't be outrun.
+CAP_FORWARD_VEL = 0.3       # m/s top speed when chasing red_cap
 
 # --- Optional Step 6: obstacle avoidance ------------------------------------
 # Off unless you do Optional Step 6: with it off, the robot walks straight at
@@ -109,6 +115,7 @@ class StateMachineNode(Node):
         # What the target looked like last frame (process_detections sets these).
         self.target_pos = 0.0               # its box_offset, -0.5..+0.5
         self.target_bottom = 0.0            # its box_bottom, px (Step 4)
+        self.target_size = 0.0              # its longer box side, px (red_cap distance)
         self.last_detection_time = None     # when we last saw it; None = not yet
 
         # Step 3: where our target was (Optional Step 5: and what it looks like).
@@ -203,6 +210,7 @@ class StateMachineNode(Node):
             self.get_logger().info(
                 f'🎯 Target at {self.target_pos:+.3f} | '
                 f'centre x {target.bbox.center.position.x:.1f} | bottom {self.target_bottom:.0f}'
+                f' | size {self.target_size:.0f}'
             )
 
     def process_detections(self, detections):
@@ -237,19 +245,26 @@ class StateMachineNode(Node):
             d = detections[i]
             if detection_class_id(d) == self.target_class_id:
                 filtered_detections.append(d)
-        print(filtered_detections)
         if len(filtered_detections) > 0:
-            offset_min = abs(box_offset(filtered_detections[0]))
-            offset_idx = 0
-            for i in range(len(filtered_detections)):
-                detection = filtered_detections[i]
-                if offset_min > abs(box_offset(detection)):
-                    offset_min = abs(box_offset(detection))
-                    offset_idx = i
-            target = filtered_detections[offset_idx]
+            # offset_min = abs(box_offset(filtered_detections[0]))
+            # offset_idx = 0
+            # for i in range(len(filtered_detections)):
+            #     detection = filtered_detections[i]
+            #     if offset_min > abs(box_offset(detection)):
+            #         offset_min = abs(box_offset(detection))
+            #         offset_idx = i
+            # target = filtered_detections[offset_idx]
+            
+            target = target_lock.pick_target(filtered_detections, self.lock)
+
+            if target is None:
+                return None
+            target_lock.remember(self.lock, target)
+            
             self.target_pos = box_offset(target)
             self.last_detection_time = self.get_clock().now()
             self.target_bottom = box_bottom(target)
+            self.target_size = max(target.bbox.size_x, target.bbox.size_y)
             return target
         else:
             return None
@@ -345,7 +360,11 @@ class StateMachineNode(Node):
                 return (SEARCH_YAW_VEL, 0)
         elif self.state == State.TRACK:
             yaw = -KP * self.target_pos
-            return (yaw, TRACK_FORWARD_VEL)
+            if getattr(self, 'target_object', None) == 'red_cap':
+                return (yaw, target_lock.cap_approach_speed(self.target_size, CAP_FORWARD_VEL))
+            # return (yaw, TRACK_FORWARD_VEL)
+            return (yaw, target_lock.approach_speed(self.target_bottom, TRACK_FORWARD_VEL))
+
             
         # ===================================================================
 

@@ -52,6 +52,7 @@ import viser
 import yaml
 
 from fisheye_converter import equirect_height, fisheye_to_equirectangular, load_camera_model
+from red_cap import RedCapDetector
 from yolo_seg import Detection, HailoYoloSeg, draw_detections
 
 # follow_me.py measures against this reference frame, so publish in it no matter
@@ -276,9 +277,12 @@ class DetectionWorker:
     the stream smooth when the model is slower than the camera.
     """
 
-    def __init__(self, model, on_result=None):
+    def __init__(self, model, on_result=None, red_cap=None):
         self.model = model
         self.on_result = on_result
+        # Color-threshold detector for the red pen cap (robot/red_cap.py); its
+        # hits are appended to YOLO's, as class red_cap.
+        self.red_cap = red_cap
         self.enabled = True
 
         self._lock = threading.Lock()
@@ -335,6 +339,11 @@ class DetectionWorker:
                 print(f"[detection] inference failed: {exc}")
                 time.sleep(0.5)
                 continue
+            if self.red_cap is not None:
+                try:
+                    detections = list(detections) + self.red_cap.detect(frame)
+                except Exception as exc:
+                    print(f"[red_cap] failed: {exc}")
 
             with self._lock:
                 self._result = (detections, frame.shape[:2])
@@ -737,6 +746,16 @@ def main():
             disabled=True,
         )
 
+    # Red pen cap: HSV color threshold (robot/red_cap.py), published as class
+    # red_cap alongside YOLO's detections. Tune until only the cap is boxed.
+    red_cap = RedCapDetector()
+    with server.gui.add_folder("Red cap"):
+        gui_rc_enable = server.gui.add_checkbox("Detect red cap", True)
+        gui_rc_hue = server.gui.add_slider("Hue width", min=2, max=25, step=1, initial_value=red_cap.hue_width)
+        gui_rc_sat = server.gui.add_slider("Min saturation", min=0, max=255, step=5, initial_value=red_cap.min_saturation)
+        gui_rc_val = server.gui.add_slider("Min value", min=0, max=255, step=5, initial_value=red_cap.min_value)
+        gui_rc_area = server.gui.add_slider("Min area (px)", min=1, max=500, step=1, initial_value=red_cap.min_area)
+
     # Focus aid: the lens is manual-focus, so give a number to turn it against.
     # Laplacian variance on the middle of the image circle -- peaks at best focus.
     with server.gui.add_folder("Focus meter"):
@@ -766,7 +785,7 @@ def main():
         on_result = None
         if publisher is not None:
             on_result = lambda dets, frame: publisher.publish(dets, frame)
-        worker = DetectionWorker(detector, on_result=on_result)
+        worker = DetectionWorker(detector, on_result=on_result, red_cap=red_cap)
 
     pacer = StreamPacer()
     fisheye_model = None
@@ -839,6 +858,11 @@ def main():
             detections = []
             if detecting:
                 detector.score_threshold = float(gui_conf.value)
+                red_cap.enabled = bool(gui_rc_enable.value)
+                red_cap.hue_width = int(gui_rc_hue.value)
+                red_cap.min_saturation = int(gui_rc_sat.value)
+                red_cap.min_value = int(gui_rc_val.value)
+                red_cap.min_area = int(gui_rc_area.value)
                 detector.want_masks = bool(gui_masks.value)
 
                 # Hand the model a frame no wider than --detect-width; masks and
